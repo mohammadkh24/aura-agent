@@ -96,3 +96,23 @@ Nest is an MIT-licensed open source project. It can grow thanks to the sponsors 
 ## License
 
 Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+
+## AURA Admin Panel
+
+A lightweight Persian RTL admin panel is available at `/admin` and is served by the NestJS application from `public/admin`.
+
+### Run
+
+1. Copy `.env.example` to `.env` and fill in your PostgreSQL and Groq credentials.
+2. Install dependencies with `npm install`.
+3. Start the API with `npm run start:dev`.
+4. Open `http://localhost:3000/admin`.
+
+The panel includes dashboard statistics, conversation history, knowledge-base management, product management, an AURA playground, and a view of the currently implemented agent tools.
+
+### Added management endpoints
+
+- `GET /conversations?page=1&limit=10&status=open` — paginated conversation list with the latest message.
+- `GET /conversations/stats` — total/open/closed conversation and message counts.
+
+**Security note:** this MVP panel currently has no admin authentication. Keep it on localhost or behind a trusted private network until an admin login/authorization layer is implemented. Do not deploy it publicly as-is.

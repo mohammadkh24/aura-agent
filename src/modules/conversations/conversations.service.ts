@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 
 import { Conversation } from './entities/conversation.entity';
 import { Message } from './entities/message.entity';
@@ -78,6 +78,74 @@ export class ConversationsService {
         conversationId: conversation.id,
         customerMessage,
         assistantMessage,
+      },
+    };
+  }
+
+
+  // فهرست مکالمات برای پنل مدیریت
+  async findAll(page = 1, limit = 10, status?: ConversationStatus) {
+    const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+    const safeLimit = Number.isFinite(limit) && limit > 0
+      ? Math.min(Math.floor(limit), 100)
+      : 10;
+
+    const query = this.conversationRepository
+      .createQueryBuilder('conversation')
+      .orderBy('conversation.updatedAt', 'DESC')
+      .skip((safePage - 1) * safeLimit)
+      .take(safeLimit);
+
+    if (status) query.where('conversation.status = :status', { status });
+
+    const [conversations, total] = await query.getManyAndCount();
+    const ids = conversations.map((item) => item.id);
+
+    const latestMessages = ids.length
+      ? await this.messageRepository.find({
+          where: { conversationId: In(ids) },
+          order: { createdAt: 'DESC' },
+        })
+      : [];
+
+    const latestByConversation = new Map<string, Message>();
+    for (const message of latestMessages) {
+      if (!latestByConversation.has(message.conversationId)) {
+        latestByConversation.set(message.conversationId, message);
+      }
+    }
+
+    return {
+      message: 'فهرست مکالمات دریافت شد.',
+      data: conversations.map((conversation) => ({
+        ...conversation,
+        lastMessage: latestByConversation.get(conversation.id) ?? null,
+      })),
+      meta: {
+        total,
+        page: safePage,
+        limit: safeLimit,
+        totalPages: Math.ceil(total / safeLimit),
+      },
+    };
+  }
+
+  // آمار موردنیاز داشبورد
+  async getStats() {
+    const [totalConversations, openConversations, closedConversations, totalMessages] =
+      await Promise.all([
+        this.conversationRepository.count(),
+        this.conversationRepository.count({ where: { status: ConversationStatus.OPEN } }),
+        this.conversationRepository.count({ where: { status: ConversationStatus.CLOSED } }),
+        this.messageRepository.count(),
+      ]);
+
+    return {
+      data: {
+        totalConversations,
+        openConversations,
+        closedConversations,
+        totalMessages,
       },
     };
   }

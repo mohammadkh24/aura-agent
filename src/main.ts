@@ -4,6 +4,8 @@ import { ConfigService } from '@nestjs/config';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Request, Response } from 'express';
+import * as express from 'express';
+import { join } from 'path';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { AllExceptionsFilter } from './common/filters/exceptions.filter';
 
@@ -53,6 +55,9 @@ async function bootstrap() {
   server.get('/docs/json', (_req: Request, res: Response) => {
     res.json(document);
   });
+
+  // پنل مدیریت استاتیک (فعلاً مناسب محیط توسعه؛ بدون احراز هویت ادمین)
+  server.use('/admin', express.static(join(process.cwd(), 'public', 'admin')));
 
   await app.listen(port, () => {
     console.log(`Server listening on port ${port}...`);
