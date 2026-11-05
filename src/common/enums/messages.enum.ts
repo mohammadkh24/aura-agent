@@ -17,9 +17,18 @@ export enum KnowledgeMessages {
   ALREADY_DEACTIVATED = 'این اطلاعات قبلاً غیرفعال شده‌اند.',
 }
 
-
 export enum AiMessages {
-    RESPONSE_GENERATED = 'پاسخ با موفقیت تولید شد.',
-    RESPONSE_FAILED = 'در حال حاضر امکان تولید پاسخ وجود ندارد.',
-  }
+  RESPONSE_GENERATED = 'پاسخ با موفقیت تولید شد.',
+  RESPONSE_FAILED = 'در حال حاضر امکان تولید پاسخ وجود ندارد.',
+}
+
+
+export const conversationMessages = {
+    CREATED: 'مکالمه با موفقیت ایجاد شد.',
+    MESSAGE_SENT: 'پیام با موفقیت ارسال شد.',
+    FETCHED: 'تاریخچه مکالمه با موفقیت دریافت شد.',
+    CLOSED: 'مکالمه با موفقیت بسته شد.',
+    NOT_FOUND: 'مکالمه موردنظر یافت نشد.',
+    ALREADY_CLOSED: 'این مکالمه قبلاً بسته شده است.',
+  };
   

@@ -6,6 +6,7 @@ import { TypeOrmDbConfig } from './config/typeorm-db-config';
 import { ProductModule } from './modules/product/product.module';
 import { KnowledgeModule } from './modules/knowledge/knowledge.module';
 import { AiModule } from './modules/ai/ai.module';
+import { ConversationsModule } from './modules/conversations/conversations.module';
 
 @Module({
   imports: [
@@ -25,6 +26,8 @@ import { AiModule } from './modules/ai/ai.module';
     KnowledgeModule,
 
     AiModule,
+
+    ConversationsModule,
   ],
 
   

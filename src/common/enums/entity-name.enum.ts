@@ -1,4 +1,6 @@
 export enum entityName {
     Product = "products",
-    Knowledge = "knowledge"
+    Knowledge = "knowledge",
+    Conversation = "conversations",
+    Message = "messages"
 }

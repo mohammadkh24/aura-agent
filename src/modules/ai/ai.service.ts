@@ -1,4 +1,3 @@
-
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 
 import Groq from 'groq-sdk';
@@ -59,12 +58,27 @@ Product search rules:
 - For example, search for "نایک" instead of "Nike".
 `;
 
-  async generateResponse(message: string): Promise<AiResponse> {
+  async generateResponse(
+    message: string,
+    history: Array<{
+      role: 'customer' | 'assistant';
+      content: string;
+    }> = [],
+  ): Promise<AiResponse> {
     const messages: Groq.Chat.ChatCompletionMessageParam[] = [
       {
         role: 'system',
         content: this.systemPrompt,
       },
+
+      // تاریخچه مکالمه
+      ...history.slice(-20).map((item) => ({
+        role:
+          item.role === 'customer' ? ('user' as const) : ('assistant' as const),
+        content: item.content,
+      })),
+
+      // پیام جدید مشتری
       {
         role: 'user',
         content: message,
