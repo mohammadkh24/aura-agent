@@ -16,3 +16,10 @@ export enum KnowledgeMessages {
   NOT_FOUND = 'اطلاعات موردنظر پیدا نشد.',
   ALREADY_DEACTIVATED = 'این اطلاعات قبلاً غیرفعال شده‌اند.',
 }
+
+
+export enum AiMessages {
+    RESPONSE_GENERATED = 'پاسخ با موفقیت تولید شد.',
+    RESPONSE_FAILED = 'در حال حاضر امکان تولید پاسخ وجود ندارد.',
+  }
+  

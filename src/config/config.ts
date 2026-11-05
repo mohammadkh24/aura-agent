@@ -4,6 +4,8 @@ export enum configKeys {
   App = 'app',
   Db = 'db',
   Jwt = 'jwt',
+  Ai = 'ai',
+
 }
 
 export const appConfig = registerAs(configKeys.App, () => ({
@@ -23,4 +25,9 @@ export const JwtConfig = registerAs(configKeys.Jwt, () => ({
   refreshTokenSecret: process.env.REFRESH_TOKEN_SECRET,
 }));
 
-export const configurations = [appConfig, dbConfig, JwtConfig];
+export const aiConfig = registerAs(configKeys.Ai, () => ({
+  groqApiKey: process.env.GROQ_API_KEY,
+  groqModel: process.env.GROQ_MODEL || 'openai/gpt-oss-20b',
+}));
+
+export const configurations = [appConfig, dbConfig, JwtConfig , aiConfig];
