@@ -4,6 +4,7 @@ import { configurations } from './config/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { TypeOrmDbConfig } from './config/typeorm-db-config';
 import { ProductModule } from './modules/product/product.module';
+import { KnowledgeModule } from './modules/knowledge/knowledge.module';
 
 @Module({
   imports: [
@@ -19,6 +20,8 @@ import { ProductModule } from './modules/product/product.module';
     }),
 
     ProductModule,
+
+    KnowledgeModule,
   ],
 
   
