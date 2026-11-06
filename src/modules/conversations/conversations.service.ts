@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 
 import { InjectRepository } from '@nestjs/typeorm';
@@ -12,6 +13,7 @@ import { Message } from './entities/message.entity';
 
 import { ConversationStatus } from './enums/conversation-status.enum';
 import { MessageRole } from './enums/message-role.enum';
+import { MessageStatus } from './enums/message-status.enum';
 
 import { SendMessageDto } from './dto/send-message.dto';
 import { conversationMessages } from 'src/common/enums/messages.enum';
@@ -19,6 +21,8 @@ import { AiService } from '../ai/ai.service';
 
 @Injectable()
 export class ConversationsService {
+  private readonly logger = new Logger(ConversationsService.name);
+
   constructor(
     @InjectRepository(Conversation)
     private readonly conversationRepository: Repository<Conversation>,
@@ -29,66 +33,95 @@ export class ConversationsService {
     private readonly aiService: AiService,
   ) {}
 
+  // ارسال پیام مشتری و دریافت پاسخ AURA
   async sendMessage(dto: SendMessageDto) {
     let conversation: Conversation;
 
-    // ادامه مکالمه یا ایجاد مکالمه جدید
     if (dto.conversationId) {
       conversation = await this.findOpenConversation(dto.conversationId);
     } else {
       conversation = this.conversationRepository.create();
-
       conversation = await this.conversationRepository.save(conversation);
     }
 
-    // دریافت تاریخچه قبل از ذخیره پیام جدید
+    // فقط پیام‌های پردازش‌شده وارد تاریخچه AI می‌شوند
     const history = await this.messageRepository.find({
       where: {
         conversationId: conversation.id,
+        status: MessageStatus.COMPLETED,
       },
       order: {
         createdAt: 'ASC',
       },
     });
 
-    // ذخیره پیام مشتری
+    // ابتدا پیام مشتری با وضعیت PENDING ذخیره می‌شود
     const customerMessage = await this.saveCustomerMessage(
       conversation.id,
       dto.message,
     );
 
-    // ارسال پیام جدید به همراه تاریخچه به AURA
-    const aiResponse = await this.aiService.generateResponse(
-      dto.message,
-      history.map((item) => ({
-        role: item.role,
-        content: item.content,
-      })),
-    );
+    try {
+      // ارسال پیام و تاریخچه به AURA
+      const aiResponse = await this.aiService.generateResponse(
+        dto.message,
+        history.map((item) => ({
+          role: item.role,
+          content: item.content,
+        })),
+      );
 
-    // ذخیره پاسخ AURA
-    const assistantMessage = await this.saveAssistantMessage(
-      conversation.id,
-      aiResponse.content,
-    );
+      // ذخیره پاسخ دستیار
+      const assistantMessage = await this.saveAssistantMessage(
+        conversation.id,
+        aiResponse.content,
+      );
 
-    return {
-      message: 'پیام با موفقیت ارسال شد.',
-      data: {
-        conversationId: conversation.id,
-        customerMessage,
-        assistantMessage,
-      },
-    };
+      // پردازش موفق؛ وضعیت پیام مشتری تغییر می‌کند
+      customerMessage.status = MessageStatus.COMPLETED;
+
+      const updatedCustomerMessage =
+        await this.messageRepository.save(customerMessage);
+
+      return {
+        message: 'پیام با موفقیت ارسال شد.',
+        data: {
+          conversationId: conversation.id,
+          customerMessage: updatedCustomerMessage,
+          assistantMessage,
+        },
+      };
+    } catch (error) {
+      // در صورت شکست، پیام مشتری حذف نمی‌شود
+      customerMessage.status = MessageStatus.FAILED;
+
+      try {
+        await this.messageRepository.save(customerMessage);
+      } catch (saveError) {
+        this.logger.error(
+          `Failed to update message status. Message ID: ${customerMessage.id}`,
+          saveError instanceof Error ? saveError.stack : undefined,
+        );
+      }
+
+      this.logger.error(
+        `Message processing failed. Conversation ID: ${conversation.id}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+
+      // خطای اصلی به لایه بالاتر منتقل می‌شود
+      throw error;
+    }
   }
-
 
   // فهرست مکالمات برای پنل مدیریت
   async findAll(page = 1, limit = 10, status?: ConversationStatus) {
     const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
-    const safeLimit = Number.isFinite(limit) && limit > 0
-      ? Math.min(Math.floor(limit), 100)
-      : 10;
+
+    const safeLimit =
+      Number.isFinite(limit) && limit > 0
+        ? Math.min(Math.floor(limit), 100)
+        : 10;
 
     const query = this.conversationRepository
       .createQueryBuilder('conversation')
@@ -96,9 +129,12 @@ export class ConversationsService {
       .skip((safePage - 1) * safeLimit)
       .take(safeLimit);
 
-    if (status) query.where('conversation.status = :status', { status });
+    if (status) {
+      query.where('conversation.status = :status', { status });
+    }
 
     const [conversations, total] = await query.getManyAndCount();
+
     const ids = conversations.map((item) => item.id);
 
     const latestMessages = ids.length
@@ -109,6 +145,7 @@ export class ConversationsService {
       : [];
 
     const latestByConversation = new Map<string, Message>();
+
     for (const message of latestMessages) {
       if (!latestByConversation.has(message.conversationId)) {
         latestByConversation.set(message.conversationId, message);
@@ -130,15 +167,23 @@ export class ConversationsService {
     };
   }
 
-  // آمار موردنیاز داشبورد
+  // آمار داشبورد
   async getStats() {
-    const [totalConversations, openConversations, closedConversations, totalMessages] =
-      await Promise.all([
-        this.conversationRepository.count(),
-        this.conversationRepository.count({ where: { status: ConversationStatus.OPEN } }),
-        this.conversationRepository.count({ where: { status: ConversationStatus.CLOSED } }),
-        this.messageRepository.count(),
-      ]);
+    const [
+      totalConversations,
+      openConversations,
+      closedConversations,
+      totalMessages,
+    ] = await Promise.all([
+      this.conversationRepository.count(),
+      this.conversationRepository.count({
+        where: { status: ConversationStatus.OPEN },
+      }),
+      this.conversationRepository.count({
+        where: { status: ConversationStatus.CLOSED },
+      }),
+      this.messageRepository.count(),
+    ]);
 
     return {
       data: {
@@ -163,7 +208,7 @@ export class ConversationsService {
     };
   }
 
-  // ارسال پیام مشتری و ذخیره آن
+  // ذخیره پیام مشتری
   async saveCustomerMessage(conversationId: string, content: string) {
     const conversation = await this.findOpenConversation(conversationId);
 
@@ -171,11 +216,10 @@ export class ConversationsService {
       role: MessageRole.CUSTOMER,
       content,
       conversationId: conversation.id,
+      status: MessageStatus.PENDING,
     });
 
-    const savedMessage = await this.messageRepository.save(message);
-
-    return savedMessage;
+    return this.messageRepository.save(message);
   }
 
   // ذخیره پاسخ AURA
@@ -186,6 +230,7 @@ export class ConversationsService {
       role: MessageRole.ASSISTANT,
       content,
       conversationId: conversation.id,
+      status: MessageStatus.COMPLETED,
     });
 
     return this.messageRepository.save(message);

@@ -8,6 +8,7 @@ import {
 } from 'typeorm';
 
 import { MessageRole } from '../enums/message-role.enum';
+import { MessageStatus } from '../enums/message-status.enum';
 import { Conversation } from './conversation.entity';
 import { entityName } from 'src/common/enums/entity-name.enum';
 
@@ -24,6 +25,13 @@ export class Message {
 
   @Column({ type: 'text' })
   content: string;
+
+  @Column({
+    type: 'enum',
+    enum: MessageStatus,
+    default: MessageStatus.COMPLETED,
+  })
+  status: MessageStatus;
 
   @ManyToOne(() => Conversation, (conversation) => conversation.messages, {
     onDelete: 'CASCADE',

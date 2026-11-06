@@ -15,6 +15,12 @@ export class AiService {
     private readonly aiToolsService: AiToolsService,
   ) {}
 
+  private readonly maxIterations = 5;
+  private readonly maxHistoryMessages = 20;
+
+  private readonly fallbackMessage =
+    'متأسفانه در حال حاضر نتوانستم پاسخ مناسبی برای درخواست شما پیدا کنم.';
+
   private readonly systemPrompt = `
 You are AURA, an AI customer support agent for an online store.
 
@@ -71,14 +77,12 @@ Product search rules:
         content: this.systemPrompt,
       },
 
-      // تاریخچه مکالمه
-      ...history.slice(-20).map((item) => ({
+      ...history.slice(-this.maxHistoryMessages).map((item) => ({
         role:
           item.role === 'customer' ? ('user' as const) : ('assistant' as const),
         content: item.content,
       })),
 
-      // پیام جدید مشتری
       {
         role: 'user',
         content: message,
@@ -86,25 +90,48 @@ Product search rules:
     ];
 
     let model = '';
-    let usage: AiResponse['usage'];
+    let totalPromptTokens = 0;
+    let totalCompletionTokens = 0;
+    let totalTokens = 0;
 
-    const maxIterations = 5;
-
-    for (let iteration = 0; iteration < maxIterations; iteration++) {
+    for (let iteration = 0; iteration < this.maxIterations; iteration++) {
       const response = await this.groqService.generateCompletion(
         messages,
         AI_TOOLS,
       );
 
       model = response.model;
-      usage = response.usage;
 
-      // مدل بدون نیاز به ابزار پاسخ داده است.
+      // تجمیع مصرف تمام درخواست‌های مدل
+      if (response.usage) {
+        totalPromptTokens += response.usage.prompt_tokens ?? 0;
+
+        totalCompletionTokens += response.usage.completion_tokens ?? 0;
+
+        totalTokens += response.usage.total_tokens ?? 0;
+      }
+
+      // مدل بدون نیاز به ابزار پاسخ داده است
       if (!response.toolCalls.length) {
+        const content = response.content?.trim();
+
+        if (!content) {
+          return this.createFallbackResponse(
+            model,
+            totalPromptTokens,
+            totalCompletionTokens,
+            totalTokens,
+          );
+        }
+
         return {
-          content: response.content,
+          content,
           model,
-          usage,
+          usage: {
+            prompt_tokens: totalPromptTokens,
+            completion_tokens: totalCompletionTokens,
+            total_tokens: totalTokens,
+          },
         };
       }
 
@@ -114,10 +141,10 @@ Product search rules:
         );
       }
 
-      // ذخیره پیام مدل شامل درخواست اجرای ابزارها
+      // ذخیره درخواست اجرای ابزارها
       messages.push(response.message as Groq.Chat.ChatCompletionMessageParam);
 
-      // اجرای ابزارهای درخواستی مدل
+      // اجرای ابزارها
       for (const toolCall of response.toolCalls) {
         if (toolCall.type !== 'function') {
           continue;
@@ -132,11 +159,11 @@ Product search rules:
           );
         } catch {
           toolResult = {
-            error: 'اطلاعات موردنظر در حال حاضر قابل دریافت نیست.',
+            error: true,
+            message: 'اطلاعات موردنظر در حال حاضر قابل دریافت نیست.',
           };
         }
 
-        // ارسال نتیجه ابزار به مدل
         messages.push({
           role: 'tool',
           tool_call_id: toolCall.id,
@@ -145,11 +172,28 @@ Product search rules:
       }
     }
 
-    return {
-      content:
-        'متأسفانه در حال حاضر نتوانستم پاسخ مناسبی برای درخواست شما پیدا کنم.',
+    return this.createFallbackResponse(
       model,
-      usage,
+      totalPromptTokens,
+      totalCompletionTokens,
+      totalTokens,
+    );
+  }
+
+  private createFallbackResponse(
+    model: string,
+    promptTokens: number,
+    completionTokens: number,
+    totalTokens: number,
+  ): AiResponse {
+    return {
+      content: this.fallbackMessage,
+      model,
+      usage: {
+        prompt_tokens: promptTokens,
+        completion_tokens: completionTokens,
+        total_tokens: totalTokens,
+      },
     };
   }
 }
