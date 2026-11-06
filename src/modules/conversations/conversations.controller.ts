@@ -8,22 +8,17 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 
-import {
-  ApiTags,
-  ApiOperation,
-  ApiParam,
-} from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiParam } from '@nestjs/swagger';
 
 import { ConversationsService } from './conversations.service';
 import { SendMessageDto } from './dto/send-message.dto';
 import { ConversationStatus } from './enums/conversation-status.enum';
+import { Throttle } from '@nestjs/throttler';
 
 @ApiTags('Conversations')
 @Controller('conversations')
 export class ConversationsController {
-  constructor(
-    private readonly conversationsService: ConversationsService,
-  ) {}
+  constructor(private readonly conversationsService: ConversationsService) {}
 
   @Get('stats')
   @ApiOperation({ summary: 'آمار مکالمات برای داشبورد مدیریت' })
@@ -52,6 +47,7 @@ export class ConversationsController {
   }
 
   @Post('messages')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @ApiOperation({ summary: 'ارسال پیام و دریافت پاسخ AURA' })
   sendMessage(@Body() dto: SendMessageDto) {
     return this.conversationsService.sendMessage(dto);
@@ -60,18 +56,14 @@ export class ConversationsController {
   @Get(':id/messages')
   @ApiOperation({ summary: 'دریافت تاریخچه مکالمه' })
   @ApiParam({ name: 'id', description: 'شناسه مکالمه' })
-  getConversationHistory(
-    @Param('id', ParseUUIDPipe) id: string,
-  ) {
+  getConversationHistory(@Param('id', ParseUUIDPipe) id: string) {
     return this.conversationsService.getConversationHistory(id);
   }
 
   @Post(':id/close')
   @ApiOperation({ summary: 'بستن مکالمه' })
   @ApiParam({ name: 'id', description: 'شناسه مکالمه' })
-  closeConversation(
-    @Param('id', ParseUUIDPipe) id: string,
-  ) {
+  closeConversation(@Param('id', ParseUUIDPipe) id: string) {
     return this.conversationsService.closeConversation(id);
   }
 }
